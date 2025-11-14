@@ -8,3 +8,7 @@ output-options:
   skip-prune: true
   prefer-skip-optional-pointer: false
   nullable-type: true
+  include-operation-ids:
+    - listBots
+    - listDeals
+    - getDeal
