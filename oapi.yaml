@@ -1,0 +1,10 @@
+package: tcmock
+output: tcmock/openapi.gen.go
+generate:
+  std-http-server: true
+  models: true
+
+output-options:
+  skip-prune: true
+  prefer-skip-optional-pointer: false
+  nullable-type: true
