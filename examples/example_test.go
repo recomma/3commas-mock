@@ -10,7 +10,7 @@ import (
 
 // TestExampleBasicUsage demonstrates basic usage of the mock server
 func TestExampleBasicUsage(t *testing.T) {
-	// Create mock server
+	// Create mock 3comma server
 	mockServer := server.NewTestServer(t)
 	defer mockServer.Close()
 
