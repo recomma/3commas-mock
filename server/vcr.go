@@ -8,7 +8,7 @@ import (
 	"strconv"
 
 	"github.com/recomma/3commas-mock/tcmock"
-	"gopkg.in/dnaeon/go-vcr.v3/cassette"
+	"gopkg.in/dnaeon/go-vcr.v4/pkg/cassette"
 )
 
 // URL pattern matchers
