@@ -21,7 +21,7 @@ var (
 // LoadVCRCassette loads a VCR cassette and populates mock server state
 // - Bots and Deals are loaded with ALL their data from real API responses
 // - bot_events are PRESERVED exactly as recorded (this is the valuable part!)
-// - Duplicate IDs will return an error
+// - Duplicate IDs will return an error unless AllowDuplicateIDs(true) is set
 // - Non-2xx responses are skipped
 func (ts *TestServer) LoadVCRCassette(cassettePath string) error {
 	// Load cassette from file
@@ -94,11 +94,17 @@ func (ts *TestServer) loadDealFromJSON(jsonBody string) error {
 
 	// Check for duplicate
 	ts.mu.RLock()
-	if _, exists := ts.deals[deal.Id]; exists {
-		ts.mu.RUnlock()
-		return fmt.Errorf("duplicate deal ID %d found in VCR cassette", deal.Id)
-	}
+	_, exists := ts.deals[deal.Id]
+	allowDuplicates := ts.allowDuplicateIDs
 	ts.mu.RUnlock()
+
+	if exists {
+		if !allowDuplicates {
+			return fmt.Errorf("duplicate deal ID %d found in VCR cassette", deal.Id)
+		}
+		// Skip this deal if duplicates are allowed (preserve existing entry)
+		return nil
+	}
 
 	// Check if bot exists, create a minimal one if not
 	ts.mu.RLock()
@@ -130,11 +136,17 @@ func (ts *TestServer) loadDealsListFromJSON(jsonBody string) error {
 	for _, deal := range deals {
 		// Check for duplicate
 		ts.mu.RLock()
-		if _, exists := ts.deals[deal.Id]; exists {
-			ts.mu.RUnlock()
-			return fmt.Errorf("duplicate deal ID %d found in VCR cassette", deal.Id)
-		}
+		_, exists := ts.deals[deal.Id]
+		allowDuplicates := ts.allowDuplicateIDs
 		ts.mu.RUnlock()
+
+		if exists {
+			if !allowDuplicates {
+				return fmt.Errorf("duplicate deal ID %d found in VCR cassette", deal.Id)
+			}
+			// Skip this deal if duplicates are allowed (preserve existing entry)
+			continue
+		}
 
 		// Check if bot exists, create a minimal one if not
 		ts.mu.RLock()
@@ -168,11 +180,17 @@ func (ts *TestServer) loadBotsListFromJSON(jsonBody string) error {
 	for _, bot := range bots {
 		// Check for duplicate
 		ts.mu.RLock()
-		if _, exists := ts.bots[bot.Id]; exists {
-			ts.mu.RUnlock()
-			return fmt.Errorf("duplicate bot ID %d found in VCR cassette", bot.Id)
-		}
+		_, exists := ts.bots[bot.Id]
+		allowDuplicates := ts.allowDuplicateIDs
 		ts.mu.RUnlock()
+
+		if exists {
+			if !allowDuplicates {
+				return fmt.Errorf("duplicate bot ID %d found in VCR cassette", bot.Id)
+			}
+			// Skip this bot if duplicates are allowed (preserve existing entry)
+			continue
+		}
 
 		// Add bot with all its data
 		ts.mu.Lock()
