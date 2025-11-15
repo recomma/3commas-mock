@@ -20,6 +20,9 @@ type TestServer struct {
 	bots  map[int]*tcmock.Bot
 	deals map[int]*tcmock.Deal
 
+	// Configuration
+	allowDuplicateIDs bool
+
 	// Error simulation
 	rateLimitEnabled bool
 	rateLimitRetry   int
@@ -63,6 +66,16 @@ func (ts *TestServer) Reset() {
 	ts.botErrors = make(map[int]error)
 	ts.dealErrors = make(map[int]error)
 	ts.rateLimitEnabled = false
+	ts.allowDuplicateIDs = false
+}
+
+// AllowDuplicateIDs enables or disables duplicate ID checking
+// When enabled, loading VCR cassettes with duplicate IDs will not return an error
+// Instead, duplicate entries will be skipped (existing entries are preserved)
+func (ts *TestServer) AllowDuplicateIDs(allow bool) {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	ts.allowDuplicateIDs = allow
 }
 
 // ListBots implements the ServerInterface method for GET /ver1/bots

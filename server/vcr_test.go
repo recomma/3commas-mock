@@ -102,6 +102,44 @@ func TestLoadVCRCassette_DuplicateError(t *testing.T) {
 	}
 }
 
+func TestLoadVCRCassette_AllowDuplicates(t *testing.T) {
+	ts := NewTestServer(t)
+	defer ts.Close()
+
+	// Enable duplicate ID allowance
+	ts.AllowDuplicateIDs(true)
+
+	// Load cassette first time - should succeed
+	err := ts.LoadVCRCassette("../testdata/fixtures/deal_2376446537")
+	if err != nil {
+		t.Fatalf("first load failed: %v", err)
+	}
+
+	// Verify the deal was loaded
+	deal, ok := ts.GetDealByID(2376446537)
+	if !ok {
+		t.Fatal("deal 2376446537 not found after first load")
+	}
+	if deal.Pair != "USDT_DOGE" {
+		t.Errorf("expected pair USDT_DOGE, got %s", deal.Pair)
+	}
+
+	// Load same cassette again - should succeed (duplicates allowed)
+	err = ts.LoadVCRCassette("../testdata/fixtures/deal_2376446537")
+	if err != nil {
+		t.Fatalf("second load failed with AllowDuplicateIDs enabled: %v", err)
+	}
+
+	// Verify the original deal is still there and unchanged
+	deal, ok = ts.GetDealByID(2376446537)
+	if !ok {
+		t.Fatal("deal 2376446537 not found after second load")
+	}
+	if deal.Pair != "USDT_DOGE" {
+		t.Errorf("expected pair USDT_DOGE after second load, got %s", deal.Pair)
+	}
+}
+
 func TestLoadVCRCassettes_Multiple(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
