@@ -119,3 +119,53 @@ func TestExampleErrorSimulation(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 }
+
+// TestExampleVCRLoading demonstrates loading real API responses from VCR cassettes
+func TestExampleVCRLoading(t *testing.T) {
+	mockServer := server.NewTestServer(t)
+	defer mockServer.Close()
+
+	// Load a VCR cassette with a real recorded deal from 3commas API
+	// Note: go-vcr appends .yaml automatically, so omit the extension
+	err := mockServer.LoadVCRCassette("../testdata/fixtures/deal_2376446537")
+	if err != nil {
+		t.Fatalf("failed to load VCR cassette: %v", err)
+	}
+
+	// Now the deal is available via the API with ALL real data
+	resp, err := http.Get(mockServer.URL() + "/ver1/deals/2376446537/show")
+	if err != nil {
+		t.Fatalf("failed to get deal: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var deal tcmock.Deal
+	if err := json.NewDecoder(resp.Body).Decode(&deal); err != nil {
+		t.Fatalf("failed to decode deal: %v", err)
+	}
+
+	// Verify we got real data from the VCR recording
+	if deal.Pair != "USDT_DOGE" {
+		t.Fatalf("expected pair USDT_DOGE, got %s", deal.Pair)
+	}
+
+	// Most importantly: bot_events are preserved from the real API!
+	if len(deal.BotEvents) != 3 {
+		t.Fatalf("expected 3 bot events from VCR, got %d", len(deal.BotEvents))
+	}
+
+	// The messages are real ones from 3commas
+	if deal.BotEvents[0].Message == nil ||
+		*deal.BotEvents[0].Message != "Placing averaging order (9 out of 9). Price: market Size: 25.0008 USDT (110.0 DOGE)" {
+		t.Fatal("bot_events not preserved correctly from VCR")
+	}
+
+	// Bot was auto-created from the deal data
+	bot, ok := mockServer.GetBot(16511317)
+	if !ok {
+		t.Fatal("bot should have been auto-created from deal")
+	}
+	if bot.AccountName != "Demo Account 2080398" {
+		t.Fatalf("expected account name from VCR, got %s", bot.AccountName)
+	}
+}
