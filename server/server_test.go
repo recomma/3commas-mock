@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
+
+	"github.com/recomma/3commas-mock/tcmock"
 )
 
 func TestNewTestServer(t *testing.T) {
@@ -29,7 +31,7 @@ func TestListBots_Empty(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var bots []Bot
+	var bots []tcmock.Bot
 	if err := json.NewDecoder(resp.Body).Decode(&bots); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -44,18 +46,8 @@ func TestListBots_WithBots(t *testing.T) {
 	defer ts.Close()
 
 	// Add some bots
-	ts.AddBot(Bot{
-		ID:        1,
-		Name:      "Test Bot 1",
-		Enabled:   true,
-		AccountID: 123,
-	})
-	ts.AddBot(Bot{
-		ID:        2,
-		Name:      "Test Bot 2",
-		Enabled:   false,
-		AccountID: 123,
-	})
+	ts.AddBot(NewBot(1, "Test Bot 1", 123, true))
+	ts.AddBot(NewBot(2, "Test Bot 2", 123, false))
 
 	resp, err := http.Get(ts.URL() + "/ver1/bots")
 	if err != nil {
@@ -63,7 +55,7 @@ func TestListBots_WithBots(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var bots []Bot
+	var bots []tcmock.Bot
 	if err := json.NewDecoder(resp.Body).Decode(&bots); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -77,8 +69,8 @@ func TestListBots_FilterByScope(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 
-	ts.AddBot(Bot{ID: 1, Name: "Enabled Bot", Enabled: true, AccountID: 123})
-	ts.AddBot(Bot{ID: 2, Name: "Disabled Bot", Enabled: false, AccountID: 123})
+	ts.AddBot(NewBot(1, "Enabled Bot", 123, true))
+	ts.AddBot(NewBot(2, "Disabled Bot", 123, false))
 
 	// Filter for enabled bots
 	resp, err := http.Get(ts.URL() + "/ver1/bots?scope=enabled")
@@ -87,7 +79,7 @@ func TestListBots_FilterByScope(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var bots []Bot
+	var bots []tcmock.Bot
 	if err := json.NewDecoder(resp.Body).Decode(&bots); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -95,7 +87,7 @@ func TestListBots_FilterByScope(t *testing.T) {
 	if len(bots) != 1 {
 		t.Fatalf("expected 1 enabled bot, got %d", len(bots))
 	}
-	if !bots[0].Enabled {
+	if !bots[0].IsEnabled {
 		t.Fatal("expected bot to be enabled")
 	}
 }
@@ -120,32 +112,12 @@ func TestGetDeal_Success(t *testing.T) {
 	defer ts.Close()
 
 	// Add bot and deal
-	ts.AddBot(Bot{ID: 1, Name: "Test Bot", Enabled: true, AccountID: 123})
-	err := ts.AddDeal(1, Deal{
-		ID:           101,
-		BotID:        1,
-		Pair:         "USDT_BTC",
-		Status:       "active",
-		ToCurrency:   "BTC",
-		FromCurrency: "USDT",
-		CreatedAt:    "2024-01-15T10:30:00.000Z",
-		UpdatedAt:    "2024-01-15T10:30:00.000Z",
-		Events: []BotEvent{
-			{
-				CreatedAt:     "2024-01-15T10:30:00.000Z",
-				Action:        "place",
-				Coin:          "BTC",
-				Type:          "buy",
-				Status:        "active",
-				Price:         "50000.0",
-				Size:          "0.0002",
-				OrderType:     "base",
-				OrderSize:     1,
-				OrderPosition: 1,
-				IsMarket:      false,
-			},
-		},
-	})
+	ts.AddBot(NewBot(1, "Test Bot", 123, true))
+
+	deal := NewDeal(101, 1, "USDT_BTC", "active")
+	AddBotEvent(&deal, "Placing base order. Price: 50000.0 USDT Size: 0.0002 BTC")
+
+	err := ts.AddDeal(deal)
 	if err != nil {
 		t.Fatalf("failed to add deal: %v", err)
 	}
@@ -160,19 +132,22 @@ func TestGetDeal_Success(t *testing.T) {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var deal Deal
-	if err := json.NewDecoder(resp.Body).Decode(&deal); err != nil {
+	var dealResp tcmock.Deal
+	if err := json.NewDecoder(resp.Body).Decode(&dealResp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if deal.ID != 101 {
-		t.Fatalf("expected deal ID 101, got %d", deal.ID)
+	if dealResp.Id != 101 {
+		t.Fatalf("expected deal ID 101, got %d", dealResp.Id)
 	}
-	if len(deal.Events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(deal.Events))
+	if len(dealResp.BotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(dealResp.BotEvents))
 	}
-	if deal.Events[0].Action != "place" {
-		t.Fatalf("expected action 'place', got '%s'", deal.Events[0].Action)
+	if dealResp.BotEvents[0].Message == nil {
+		t.Fatal("expected bot event to have a message")
+	}
+	if *dealResp.BotEvents[0].Message != "Placing base order. Price: 50000.0 USDT Size: 0.0002 BTC" {
+		t.Fatalf("expected specific message, got '%s'", *dealResp.BotEvents[0].Message)
 	}
 }
 
@@ -180,42 +155,23 @@ func TestAddBotEvent(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 
-	ts.AddBot(Bot{ID: 1, Name: "Test Bot", Enabled: true, AccountID: 123})
-	ts.AddDeal(1, Deal{
-		ID:        101,
-		BotID:     1,
-		Pair:      "USDT_BTC",
-		Status:    "active",
-		CreatedAt: "2024-01-15T10:30:00.000Z",
-		UpdatedAt: "2024-01-15T10:30:00.000Z",
-		Events:    []BotEvent{},
-	})
+	ts.AddBot(NewBot(1, "Test Bot", 123, true))
+	deal := NewDeal(101, 1, "USDT_BTC", "active")
+	ts.AddDeal(deal)
 
 	// Add an event
-	err := ts.AddBotEvent(101, BotEvent{
-		CreatedAt:     "2024-01-15T10:32:00.000Z",
-		Action:        "place",
-		Coin:          "BTC",
-		Type:          "buy",
-		Status:        "active",
-		Price:         "48750.0",
-		Size:          "0.0004",
-		OrderType:     "safety",
-		OrderSize:     2,
-		OrderPosition: 1,
-		IsMarket:      false,
-	})
+	err := ts.AddBotEventToDeal(101, "Placing safety order. Price: 48750.0 USDT Size: 0.0004 BTC")
 	if err != nil {
 		t.Fatalf("failed to add bot event: %v", err)
 	}
 
 	// Verify event was added
-	deal, ok := ts.GetDealByID(101)
+	dealResp, ok := ts.GetDealByID(101)
 	if !ok {
 		t.Fatal("deal not found")
 	}
-	if len(deal.Events) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(deal.Events))
+	if len(dealResp.BotEvents) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(dealResp.BotEvents))
 	}
 }
 
@@ -245,12 +201,12 @@ func TestListDeals_FilterByBot(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 
-	ts.AddBot(Bot{ID: 1, Name: "Bot 1", Enabled: true, AccountID: 123})
-	ts.AddBot(Bot{ID: 2, Name: "Bot 2", Enabled: true, AccountID: 123})
+	ts.AddBot(NewBot(1, "Bot 1", 123, true))
+	ts.AddBot(NewBot(2, "Bot 2", 123, true))
 
-	ts.AddDeal(1, Deal{ID: 101, BotID: 1, Status: "active"})
-	ts.AddDeal(1, Deal{ID: 102, BotID: 1, Status: "active"})
-	ts.AddDeal(2, Deal{ID: 103, BotID: 2, Status: "active"})
+	ts.AddDeal(NewDeal(101, 1, "USDT_BTC", "active"))
+	ts.AddDeal(NewDeal(102, 1, "USDT_ETH", "active"))
+	ts.AddDeal(NewDeal(103, 2, "USDT_BTC", "active"))
 
 	resp, err := http.Get(ts.URL() + "/ver1/deals?bot_id=1")
 	if err != nil {
@@ -258,7 +214,7 @@ func TestListDeals_FilterByBot(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var deals []Deal
+	var deals []tcmock.Deal
 	if err := json.NewDecoder(resp.Body).Decode(&deals); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
@@ -272,8 +228,8 @@ func TestReset(t *testing.T) {
 	ts := NewTestServer(t)
 	defer ts.Close()
 
-	ts.AddBot(Bot{ID: 1, Name: "Test Bot", Enabled: true, AccountID: 123})
-	ts.AddDeal(1, Deal{ID: 101, BotID: 1, Status: "active"})
+	ts.AddBot(NewBot(1, "Test Bot", 123, true))
+	ts.AddDeal(NewDeal(101, 1, "USDT_BTC", "active"))
 	ts.SetRateLimitError(true, 60)
 
 	ts.Reset()

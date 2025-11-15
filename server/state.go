@@ -1,31 +1,35 @@
 package server
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/recomma/3commas-mock/tcmock"
+)
 
 // Bot Management
 
 // AddBot adds a bot to the mock server's state
-func (ts *TestServer) AddBot(bot Bot) {
+func (ts *TestServer) AddBot(bot tcmock.Bot) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	ts.bots[bot.ID] = &bot
+	ts.bots[bot.Id] = &bot
 }
 
 // GetBot retrieves a bot by ID
-func (ts *TestServer) GetBot(botID int) (Bot, bool) {
+func (ts *TestServer) GetBot(botID int) (tcmock.Bot, bool) {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
 	bot, ok := ts.bots[botID]
 	if !ok {
-		return Bot{}, false
+		return tcmock.Bot{}, false
 	}
 	return *bot, true
 }
 
-// UpdateBot updates a bot's state
-func (ts *TestServer) UpdateBot(botID int, updates BotUpdate) error {
+// UpdateBotEnabled updates a bot's enabled state
+func (ts *TestServer) UpdateBotEnabled(botID int, enabled bool) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
@@ -34,12 +38,22 @@ func (ts *TestServer) UpdateBot(botID int, updates BotUpdate) error {
 		return fmt.Errorf("bot %d not found", botID)
 	}
 
-	if updates.Enabled != nil {
-		bot.Enabled = *updates.Enabled
+	bot.IsEnabled = enabled
+
+	return nil
+}
+
+// UpdateBotName updates a bot's name
+func (ts *TestServer) UpdateBotName(botID int, name string) error {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	bot, ok := ts.bots[botID]
+	if !ok {
+		return fmt.Errorf("bot %d not found", botID)
 	}
-	if updates.Name != nil {
-		bot.Name = *updates.Name
-	}
+
+	bot.Name = &name
 
 	return nil
 }
@@ -53,18 +67,18 @@ func (ts *TestServer) RemoveBot(botID int) {
 
 	// Remove all deals for this bot
 	for dealID, deal := range ts.deals {
-		if deal.BotID == botID {
+		if deal.BotId == botID {
 			delete(ts.deals, dealID)
 		}
 	}
 }
 
 // GetAllBots returns all bots in the mock
-func (ts *TestServer) GetAllBots() []Bot {
+func (ts *TestServer) GetAllBots() []tcmock.Bot {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	result := make([]Bot, 0, len(ts.bots))
+	result := make([]tcmock.Bot, 0, len(ts.bots))
 	for _, bot := range ts.bots {
 		result = append(result, *bot)
 	}
@@ -74,34 +88,33 @@ func (ts *TestServer) GetAllBots() []Bot {
 // Deal Management
 
 // AddDeal adds a deal to the mock server's state
-func (ts *TestServer) AddDeal(botID int, deal Deal) error {
+func (ts *TestServer) AddDeal(deal tcmock.Deal) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
 	// Check if bot exists
-	if _, ok := ts.bots[botID]; !ok {
-		return fmt.Errorf("bot %d not found", botID)
+	if _, ok := ts.bots[deal.BotId]; !ok {
+		return fmt.Errorf("bot %d not found", deal.BotId)
 	}
 
-	deal.BotID = botID
-	ts.deals[deal.ID] = &deal
+	ts.deals[deal.Id] = &deal
 	return nil
 }
 
 // GetDealByID retrieves a deal by ID (state management method)
-func (ts *TestServer) GetDealByID(dealID int) (Deal, bool) {
+func (ts *TestServer) GetDealByID(dealID int) (tcmock.Deal, bool) {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
 	deal, ok := ts.deals[dealID]
 	if !ok {
-		return Deal{}, false
+		return tcmock.Deal{}, false
 	}
 	return *deal, true
 }
 
-// UpdateDeal updates a deal's state
-func (ts *TestServer) UpdateDeal(dealID int, updates DealUpdate) error {
+// UpdateDealStatus updates a deal's status
+func (ts *TestServer) UpdateDealStatus(dealID int, status string) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
@@ -110,15 +123,14 @@ func (ts *TestServer) UpdateDeal(dealID int, updates DealUpdate) error {
 		return fmt.Errorf("deal %d not found", dealID)
 	}
 
-	if updates.Status != nil {
-		deal.Status = *updates.Status
-	}
+	deal.Status = tcmock.DealStatus(status)
 
 	return nil
 }
 
-// AddBotEvent adds a new bot event to an existing deal
-func (ts *TestServer) AddBotEvent(dealID int, event BotEvent) error {
+// AddBotEventToDeal adds a new bot event to an existing deal
+// message: Human-readable event description
+func (ts *TestServer) AddBotEventToDeal(dealID int, message string) error {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
@@ -127,7 +139,7 @@ func (ts *TestServer) AddBotEvent(dealID int, event BotEvent) error {
 		return fmt.Errorf("deal %d not found", dealID)
 	}
 
-	deal.Events = append(deal.Events, event)
+	AddBotEvent(deal, message)
 	return nil
 }
 
@@ -140,11 +152,11 @@ func (ts *TestServer) RemoveDeal(dealID int) {
 }
 
 // GetAllDeals returns all deals in the mock
-func (ts *TestServer) GetAllDeals() []Deal {
+func (ts *TestServer) GetAllDeals() []tcmock.Deal {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	result := make([]Deal, 0, len(ts.deals))
+	result := make([]tcmock.Deal, 0, len(ts.deals))
 	for _, deal := range ts.deals {
 		result = append(result, *deal)
 	}
@@ -152,13 +164,13 @@ func (ts *TestServer) GetAllDeals() []Deal {
 }
 
 // GetBotDeals returns deals for a specific bot
-func (ts *TestServer) GetBotDeals(botID int) []Deal {
+func (ts *TestServer) GetBotDeals(botID int) []tcmock.Deal {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
 
-	result := make([]Deal, 0)
+	result := make([]tcmock.Deal, 0)
 	for _, deal := range ts.deals {
-		if deal.BotID == botID {
+		if deal.BotId == botID {
 			result = append(result, *deal)
 		}
 	}
