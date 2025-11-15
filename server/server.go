@@ -17,8 +17,8 @@ type TestServer struct {
 	mu     sync.RWMutex
 
 	// State
-	bots  map[int]*Bot
-	deals map[int]*Deal
+	bots  map[int]*tcmock.Bot
+	deals map[int]*tcmock.Deal
 
 	// Error simulation
 	rateLimitEnabled bool
@@ -30,8 +30,8 @@ type TestServer struct {
 // NewTestServer creates a new mock 3Commas server for testing
 func NewTestServer(t *testing.T) *TestServer {
 	ts := &TestServer{
-		bots:       make(map[int]*Bot),
-		deals:      make(map[int]*Deal),
+		bots:       make(map[int]*tcmock.Bot),
+		deals:      make(map[int]*tcmock.Deal),
 		botErrors:  make(map[int]error),
 		dealErrors: make(map[int]error),
 	}
@@ -58,8 +58,8 @@ func (ts *TestServer) Reset() {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 
-	ts.bots = make(map[int]*Bot)
-	ts.deals = make(map[int]*Deal)
+	ts.bots = make(map[int]*tcmock.Bot)
+	ts.deals = make(map[int]*tcmock.Deal)
 	ts.botErrors = make(map[int]error)
 	ts.dealErrors = make(map[int]error)
 	ts.rateLimitEnabled = false
@@ -85,14 +85,14 @@ func (ts *TestServer) ListBots(w http.ResponseWriter, r *http.Request, params tc
 	}
 
 	// Filter bots based on scope parameter
-	var result []Bot
+	var result []tcmock.Bot
 	for _, bot := range ts.bots {
 		// Apply scope filter if provided
 		if params.Scope != nil {
-			if *params.Scope == tcmock.Enabled && !bot.Enabled {
+			if *params.Scope == tcmock.Enabled && !bot.IsEnabled {
 				continue
 			}
-			if *params.Scope == tcmock.Disabled && bot.Enabled {
+			if *params.Scope == tcmock.Disabled && bot.IsEnabled {
 				continue
 			}
 		}
@@ -110,15 +110,15 @@ func (ts *TestServer) ListDeals(w http.ResponseWriter, r *http.Request, params t
 	defer ts.mu.RUnlock()
 
 	// Filter deals based on parameters
-	var result []Deal
+	var result []tcmock.Deal
 	for _, deal := range ts.deals {
 		// Apply bot_id filter if provided
-		if params.BotId != nil && deal.BotID != *params.BotId {
+		if params.BotId != nil && deal.BotId != *params.BotId {
 			continue
 		}
 
 		// Apply scope filter if provided
-		if params.Scope != nil && string(*params.Scope) != deal.Status {
+		if params.Scope != nil && tcmock.DealStatus(*params.Scope) != deal.Status {
 			continue
 		}
 
