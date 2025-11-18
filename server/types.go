@@ -1,6 +1,7 @@
 package server
 
 import (
+	"strings"
 	"time"
 
 	"github.com/oapi-codegen/nullable"
@@ -39,19 +40,26 @@ func NewBot(id int, name string, accountID int, enabled bool) tcmock.Bot {
 // This is a helper to make it easier to create test deals
 func NewDeal(id int, botID int, pair string, status string) tcmock.Deal {
 	now := time.Now()
-	// Extract currency from pair (assumes format like "USDT_BTC")
+	// Extract currency from pair (format like "USDT_BTC" or "BTC_USD")
 	toCurrency := "BTC"
-	if len(pair) > 3 {
-		toCurrency = pair[len(pair)-3:]
+	if pair != "" {
+		upper := strings.ToUpper(pair)
+		if parts := strings.Split(upper, "_"); len(parts) > 1 {
+			toCurrency = parts[len(parts)-1]
+		} else if len(upper) > 3 {
+			toCurrency = upper[len(upper)-3:]
+		} else {
+			toCurrency = upper
+		}
 	}
 	return tcmock.Deal{
-		Id:                        id,
-		BotId:                     botID,
-		Pair:                      pair,
-		Status:                    tcmock.DealStatus(status),
-		CreatedAt:                 now,
-		UpdatedAt:                 now,
-		BotEvents:                 []struct {
+		Id:        id,
+		BotId:     botID,
+		Pair:      pair,
+		Status:    tcmock.DealStatus(status),
+		CreatedAt: now,
+		UpdatedAt: now,
+		BotEvents: []struct {
 			CreatedAt *time.Time `json:"created_at,omitempty"`
 			Message   *string    `json:"message,omitempty"`
 		}{},
@@ -105,19 +113,19 @@ func NewDeal(id int, botID int, pair string, status string) tcmock.Deal {
 		SafetyStrategyList:               []map[string]interface{}{},
 		SlToBreakevenEnabled:             false,
 		CloseStrategyList:                []map[string]interface{}{},
-		TakeProfitSteps:                  []struct {
-			AmountPercentage   *float32                      `json:"amount_percentage,omitempty"`
-			Editable           *bool                         `json:"editable,omitempty"`
+		TakeProfitSteps: []struct {
+			AmountPercentage   *float32                     `json:"amount_percentage,omitempty"`
+			Editable           *bool                        `json:"editable,omitempty"`
 			ExecutionTimestamp nullable.Nullable[time.Time] `json:"execution_timestamp,omitempty"`
-			Id                 *int                          `json:"id,omitempty"`
-			InitialAmount      *string                       `json:"initial_amount,omitempty"`
-			PanicSellable      *bool                         `json:"panic_sellable,omitempty"`
-			Price              *string                       `json:"price,omitempty"`
-			ProfitPercentage   *float32                      `json:"profit_percentage,omitempty"`
-			Status             *string                       `json:"status,omitempty"`
-			TradeId            *int                          `json:"trade_id,omitempty"`
+			Id                 *int                         `json:"id,omitempty"`
+			InitialAmount      *string                      `json:"initial_amount,omitempty"`
+			PanicSellable      *bool                        `json:"panic_sellable,omitempty"`
+			Price              *string                      `json:"price,omitempty"`
+			ProfitPercentage   *float32                     `json:"profit_percentage,omitempty"`
+			Status             *string                      `json:"status,omitempty"`
+			TradeId            *int                         `json:"trade_id,omitempty"`
 		}{},
-		Type:                             "simple",
+		Type: "simple",
 	}
 }
 
